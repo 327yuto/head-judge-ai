@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { ComparisonResult, UploadedImage } from '$lib/types';
+	import type { EvaluationResult, UploadedImage } from '$lib/types';
 	import ImageModal from './ImageModal.svelte';
 	
-	export let results: ComparisonResult[] = [];
+	export let results: EvaluationResult[] = [];
 	export let images: UploadedImage[] = [];
 	
 	let selectedImage: UploadedImage | null = null;

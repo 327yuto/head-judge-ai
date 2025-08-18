@@ -1,4 +1,4 @@
-import type { ComparisonRequest, ComparisonResponse } from '$lib/types';
+import type { EvaluationRequest, EvaluationResponse } from '$lib/types';
 
 const DIFY_API_URL = import.meta.env.VITE_DIFY_API_URL || 'https://api.dify.ai/v1';
 const DIFY_API_KEY = import.meta.env.VITE_DIFY_API_KEY || '';
@@ -10,21 +10,12 @@ export class DifyAPIError extends Error {
 	}
 }
 
-export async function compareImages(request: ComparisonRequest): Promise<ComparisonResponse> {
+export async function evaluateImage(request: EvaluationRequest): Promise<EvaluationResponse> {
 	if (!DIFY_API_KEY) {
 		throw new DifyAPIError('DIFY API key is not configured');
 	}
 
 	try {
-		// Convert base64 images to file format for Dify
-		const imageFiles = request.targetImages.map((base64, index) => ({
-			type: 'url',
-			transfer_method: 'remote_url',
-			// Note: In production, you'd upload images to a CDN first
-			// For now, we'll use a placeholder
-			url: `data:image/jpeg;base64,${base64}`
-		}));
-
 		const response = await fetch(`${DIFY_API_URL}/workflows/run`, {
 			method: 'POST',
 			headers: {
@@ -33,7 +24,12 @@ export async function compareImages(request: ComparisonRequest): Promise<Compari
 			},
 			body: JSON.stringify({
 				inputs: {
-					image: imageFiles
+					context: request.context,
+					image: [{
+						type: 'url',
+						transfer_method: 'remote_url',
+						url: `data:image/jpeg;base64,${request.image}`
+					}]
 				},
 				response_mode: 'blocking',
 				user: 'web-user'
@@ -52,19 +48,22 @@ export async function compareImages(request: ComparisonRequest): Promise<Compari
 		const data = await response.json();
 		
 		// Mock response for now since Dify workflow needs to be configured
-		// In production, parse actual Dify response
+		// In production, parse actual Dify response from data.text
 		return {
-			results: request.targetImages.map((_, index) => ({
-				imageIndex: index,
+			text: {
 				score: Math.floor(Math.random() * 100), // Mock score
-				analysis: 'Analysis pending workflow configuration'
-			}))
+				analysis: `コンテキスト「${request.context}」に基づく評価結果です。実際のDifyワークフローからの応答が必要です。`,
+				details: {
+					timestamp: new Date().toISOString(),
+					context: request.context
+				}
+			}
 		};
 	} catch (error) {
 		if (error instanceof DifyAPIError) {
 			throw error;
 		}
-		throw new DifyAPIError(`Failed to compare images: ${error}`);
+		throw new DifyAPIError(`Failed to evaluate image: ${error}`);
 	}
 }
 

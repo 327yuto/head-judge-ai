@@ -2,25 +2,31 @@ export interface UploadedImage {
 	id: string;
 	file: File;
 	url: string;
-	isBase: boolean;
 }
 
-export interface ComparisonResult {
+export interface EvaluationResult {
+	id: string;
 	imageId: string;
 	score: number;
+	analysis: string;
+	details?: {
+		[key: string]: any;
+	};
 	rank?: number;
-	analysis?: string;
+	timestamp: Date;
 }
 
-export interface ComparisonRequest {
-	baseImage: string;
-	targetImages: string[];
+export interface EvaluationRequest {
+	context: string;
+	image: string;
 }
 
-export interface ComparisonResponse {
-	results: Array<{
-		imageIndex: number;
+export interface EvaluationResponse {
+	text: {
 		score: number;
-		analysis?: string;
-	}>;
+		analysis: string;
+		details?: {
+			[key: string]: any;
+		};
+	};
 }

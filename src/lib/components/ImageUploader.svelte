@@ -1,9 +1,8 @@
 <script lang="ts">
 	import type { UploadedImage } from '$lib/types';
 	
-	export let images: UploadedImage[] = [];
-	export let isBase = false;
-	export let maxImages = isBase ? 1 : 10;
+	export let image: UploadedImage | null = null;
+	export let maxImages = 1;
 	
 	let fileInput: HTMLInputElement;
 	let isDragging = false;
@@ -20,27 +19,19 @@
 			return;
 		}
 		
-		if (isBase && images.length > 0) {
-			images = [];
+		// Clean up previous image if exists
+		if (image) {
+			URL.revokeObjectURL(image.url);
 		}
 		
-		const remainingSlots = maxImages - images.length;
-		const filesToAdd = validFiles.slice(0, remainingSlots);
-		
-		filesToAdd.forEach(file => {
-			const url = URL.createObjectURL(file);
-			const newImage: UploadedImage = {
-				id: crypto.randomUUID(),
-				file,
-				url,
-				isBase
-			};
-			images = [...images, newImage];
-		});
-		
-		if (validFiles.length > remainingSlots) {
-			alert(`最大${maxImages}枚まで追加可能です`);
-		}
+		// Take the first valid file
+		const file = validFiles[0];
+		const url = URL.createObjectURL(file);
+		image = {
+			id: crypto.randomUUID(),
+			file,
+			url
+		};
 	}
 	
 	function handleDrop(e: DragEvent) {
@@ -59,11 +50,10 @@
 		isDragging = false;
 	}
 	
-	function removeImage(id: string) {
-		const image = images.find(img => img.id === id);
+	function removeImage() {
 		if (image) {
 			URL.revokeObjectURL(image.url);
-			images = images.filter(img => img.id !== id);
+			image = null;
 		}
 	}
 	
@@ -73,12 +63,12 @@
 </script>
 
 <div class="uploader">
-	<h3>{isBase ? '基準画像' : '比較対象画像'}</h3>
+	<h3>評価対象画像</h3>
 	
 	<div 
 		class="drop-zone"
 		class:dragging={isDragging}
-		class:has-images={images.length > 0}
+		class:has-image={image !== null}
 		on:drop={handleDrop}
 		on:dragover={handleDragOver}
 		on:dragleave={handleDragLeave}
@@ -87,26 +77,21 @@
 		on:click={triggerFileInput}
 		on:keydown={(e) => e.key === 'Enter' && triggerFileInput()}
 	>
-		{#if images.length === 0}
+		{#if !image}
 			<p>画像をドラッグ&ドロップ<br>または<br>クリックして選択</p>
 		{:else}
-			<div class="image-grid">
-				{#each images as image (image.id)}
-					<div class="image-item">
-						<img src={image.url} alt="Uploaded" />
-						<button
-							class="remove-btn"
-							on:click|stopPropagation={() => removeImage(image.id)}
-							aria-label="画像を削除"
-						>
-							×
-						</button>
-					</div>
-				{/each}
+			<div class="image-container">
+				<div class="image-item">
+					<img src={image.url} alt="評価対象画像" />
+					<button
+						class="remove-btn"
+						on:click|stopPropagation={removeImage}
+						aria-label="画像を削除"
+					>
+						×
+					</button>
+				</div>
 			</div>
-			{#if !isBase && images.length < maxImages}
-				<p class="add-more">さらに追加（{images.length}/{maxImages}）</p>
-			{/if}
 		{/if}
 	</div>
 	
@@ -114,7 +99,6 @@
 		bind:this={fileInput}
 		type="file"
 		accept="image/*"
-		multiple={!isBase}
 		on:change={(e) => handleFiles(e.currentTarget.files)}
 		style="display: none;"
 	/>
@@ -155,22 +139,23 @@
 		background-color: #e8f4fd;
 	}
 	
-	.drop-zone.has-images {
+	.drop-zone.has-image {
 		padding: 1rem;
 	}
 	
-	.image-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-		gap: 1rem;
+	.image-container {
+		display: flex;
+		justify-content: center;
 		width: 100%;
 	}
 	
 	.image-item {
 		position: relative;
-		aspect-ratio: 1;
+		width: 200px;
+		height: 200px;
 		overflow: hidden;
-		border-radius: 4px;
+		border-radius: 8px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 	}
 	
 	.image-item img {
@@ -204,9 +189,4 @@
 		border-color: #ff4444;
 	}
 	
-	.add-more {
-		margin-top: 1rem;
-		font-size: 0.9rem;
-		color: #666;
-	}
 </style>

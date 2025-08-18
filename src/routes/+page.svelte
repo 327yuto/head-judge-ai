@@ -1,104 +1,119 @@
 <script lang="ts">
+	import ContextInput from '$lib/components/ContextInput.svelte';
 	import ImageUploader from '$lib/components/ImageUploader.svelte';
 	import ResultDisplay from '$lib/components/ResultDisplay.svelte';
-	import { compareImages, imageToBase64 } from '$lib/api/dify';
-	import type { UploadedImage, ComparisonResult } from '$lib/types';
+	import { evaluateImage, imageToBase64 } from '$lib/api/dify';
+	import type { UploadedImage, EvaluationResult } from '$lib/types';
 	
-	let baseImages: UploadedImage[] = [];
-	let targetImages: UploadedImage[] = [];
-	let results: ComparisonResult[] = [];
+	let context: string = '';
+	let currentImage: UploadedImage | null = null;
+	let results: EvaluationResult[] = [];
+	let evaluatedImages: UploadedImage[] = [];
 	let isLoading = false;
 	let error: string | null = null;
 	
-	$: canCompare = baseImages.length === 1 && targetImages.length > 0;
+	$: canEvaluate = context.trim() !== '' && currentImage !== null;
 	
-	async function handleCompare() {
-		if (!canCompare) return;
+	async function handleEvaluate() {
+		if (!canEvaluate || !currentImage) return;
 		
 		isLoading = true;
 		error = null;
-		results = [];
 		
 		try {
-			const baseImage64 = await imageToBase64(baseImages[0].file);
-			const targetImages64 = await Promise.all(
-				targetImages.map(img => imageToBase64(img.file))
-			);
+			const image64 = await imageToBase64(currentImage.file);
 			
-			const response = await compareImages({
-				baseImage: baseImage64,
-				targetImages: targetImages64
+			const response = await evaluateImage({
+				context: context.trim(),
+				image: image64
 			});
 			
-			results = response.results.map((result, index) => ({
-				imageId: targetImages[index].id,
-				score: result.score,
-				analysis: result.analysis
+			// Create evaluation result
+			const evaluationResult: EvaluationResult = {
+				id: crypto.randomUUID(),
+				imageId: currentImage.id,
+				score: response.text.score,
+				analysis: response.text.analysis,
+				details: response.text.details,
+				timestamp: new Date()
+			};
+			
+			// Add to results and evaluated images
+			results = [...results, evaluationResult];
+			evaluatedImages = [...evaluatedImages, currentImage];
+			
+			// Sort results by score (highest first)
+			results = results.sort((a, b) => b.score - a.score).map((result, index) => ({
+				...result,
+				rank: index + 1
 			}));
+			
+			// Clear current image for next evaluation
+			currentImage = null;
+			
 		} catch (err) {
-			error = err instanceof Error ? err.message : '比較処理中にエラーが発生しました';
-			console.error('Comparison error:', err);
+			error = err instanceof Error ? err.message : '評価処理中にエラーが発生しました';
+			console.error('Evaluation error:', err);
 		} finally {
 			isLoading = false;
 		}
 	}
 	
 	async function handleRetry() {
-		await handleCompare();
+		await handleEvaluate();
 	}
 	
 	function resetAll() {
-		baseImages.forEach(img => URL.revokeObjectURL(img.url));
-		targetImages.forEach(img => URL.revokeObjectURL(img.url));
-		baseImages = [];
-		targetImages = [];
+		if (currentImage) {
+			URL.revokeObjectURL(currentImage.url);
+		}
+		evaluatedImages.forEach(img => URL.revokeObjectURL(img.url));
+		
+		context = '';
+		currentImage = null;
 		results = [];
+		evaluatedImages = [];
 		error = null;
 	}
 </script>
 
 <svelte:head>
-	<title>ボディビルダー比較アプリ</title>
-	<meta name="description" content="画像を基準と比較してスコアリング" />
+	<title>ボディビルダー評価アプリ</title>
+	<meta name="description" content="コンテキストに基づいて画像を評価・ランキング" />
 </svelte:head>
 
 <div class="container">
 	<header>
-		<h1>ボディビルダー比較アプリ</h1>
-		<p class="subtitle">基準画像と比較対象を選択して、美しさをスコア化します</p>
+		<h1>ボディビルダー評価アプリ</h1>
+		<p class="subtitle">評価基準を設定して、画像をスコア化・ランキング表示します</p>
 	</header>
 	
 	<main>
-		<div class="uploaders">
-			<div class="uploader-section">
-				<ImageUploader bind:images={baseImages} isBase={true} />
-			</div>
-			
-			<div class="uploader-section">
-				<ImageUploader bind:images={targetImages} isBase={false} />
-			</div>
+		<div class="evaluation-form">
+			<ContextInput bind:context />
+			<ImageUploader bind:image={currentImage} />
 		</div>
 		
 		<div class="actions">
 			<button 
 				class="btn btn-primary"
-				on:click={handleCompare}
-				disabled={!canCompare || isLoading}
+				on:click={handleEvaluate}
+				disabled={!canEvaluate || isLoading}
 			>
 				{#if isLoading}
-					比較中...
+					評価中...
 				{:else}
-					比較実行
+					評価実行
 				{/if}
 			</button>
 			
-			{#if baseImages.length > 0 || targetImages.length > 0}
+			{#if results.length > 0}
 				<button 
 					class="btn btn-secondary"
 					on:click={resetAll}
 					disabled={isLoading}
 				>
-					リセット
+					全てリセット
 				</button>
 			{/if}
 		</div>
@@ -112,7 +127,7 @@
 			</div>
 		{/if}
 		
-		<ResultDisplay {results} images={targetImages} />
+		<ResultDisplay {results} images={evaluatedImages} />
 	</main>
 </div>
 
@@ -151,7 +166,7 @@
 		color: #666;
 	}
 	
-	.uploaders {
+	.evaluation-form {
 		display: grid;
 		grid-template-columns: 1fr;
 		gap: 2rem;
@@ -159,8 +174,9 @@
 	}
 	
 	@media (min-width: 768px) {
-		.uploaders {
-			grid-template-columns: 1fr 2fr;
+		.evaluation-form {
+			grid-template-columns: 1fr 1fr;
+			align-items: start;
 		}
 	}
 	
