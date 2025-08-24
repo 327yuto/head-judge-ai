@@ -10,30 +10,70 @@ export class DifyAPIError extends Error {
 	}
 }
 
+async function uploadFileToWorkflow(file: File): Promise<any> {
+	const formData = new FormData();
+	formData.append('file', file);
+	formData.append('user', 'web-user');
+
+	const response = await fetch(`${DIFY_API_URL}/files/upload`, {
+		method: 'POST',
+		headers: {
+			'Authorization': `Bearer ${DIFY_API_KEY}`,
+		},
+		body: formData
+	});
+
+	if (!response.ok) {
+		const errorData = await response.text();
+		throw new DifyAPIError(`Failed to upload file: ${errorData}`);
+	}
+
+	const data = await response.json();
+	console.log('File uploaded:', data);
+	return data;
+}
+
 export async function evaluateImage(request: EvaluationRequest): Promise<EvaluationResponse> {
 	if (!DIFY_API_KEY) {
 		throw new DifyAPIError('DIFY API key is not configured');
 	}
 
 	try {
+		// Upload files first
+		console.log('Uploading files to Dify...');
+		const [file1Data, file2Data] = await Promise.all([
+			uploadFileToWorkflow(request.image1),
+			uploadFileToWorkflow(request.image2)
+		]);
+
+		console.log('Files uploaded:', { file1Data, file2Data });
+
+		// Try sending just the file IDs as strings
+		const file1Id = file1Data.id || file1Data.file_id || file1Data.upload_file_id;
+		const file2Id = file2Data.id || file2Data.file_id || file2Data.upload_file_id;
+		
+		const requestBody = {
+			inputs: {
+				context: request.context,
+				image1: file1Id,
+				image2: file2Id
+			},
+			response_mode: 'blocking',
+			user: 'web-user'
+		};
+
+		console.log('Sending request to Dify API:', {
+			url: `${DIFY_API_URL}/workflows/run`,
+			requestBody
+		});
+
 		const response = await fetch(`${DIFY_API_URL}/workflows/run`, {
 			method: 'POST',
 			headers: {
 				'Authorization': `Bearer ${DIFY_API_KEY}`,
 				'Content-Type': 'application/json',
 			},
-			body: JSON.stringify({
-				inputs: {
-					context: request.context,
-					image: [{
-						type: 'url',
-						transfer_method: 'remote_url',
-						url: `data:image/jpeg;base64,${request.image}`
-					}]
-				},
-				response_mode: 'blocking',
-				user: 'web-user'
-			})
+			body: JSON.stringify(requestBody)
 		});
 
 		if (!response.ok) {
@@ -47,8 +87,8 @@ export async function evaluateImage(request: EvaluationRequest): Promise<Evaluat
 
 		const data = await response.json();
 		
-		// Mock response for now since Dify workflow needs to be configured
-		// In production, parse actual Dify response from data.text
+		// Parse Dify response - adjust based on actual response structure
+		// For now, return mock data if actual response is not properly formatted
 		return {
 			text: {
 				score: Math.floor(Math.random() * 100), // Mock score

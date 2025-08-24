@@ -63,8 +63,6 @@
 </script>
 
 <div class="uploader">
-	<h3>評価対象画像</h3>
-	
 	<div 
 		class="drop-zone"
 		class:dragging={isDragging}
@@ -107,12 +105,6 @@
 <style>
 	.uploader {
 		margin-bottom: 2rem;
-	}
-	
-	h3 {
-		margin-bottom: 1rem;
-		font-size: 1.2rem;
-		font-weight: 600;
 	}
 	
 	.drop-zone {

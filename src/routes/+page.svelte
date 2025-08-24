@@ -2,36 +2,36 @@
 	import ContextInput from '$lib/components/ContextInput.svelte';
 	import ImageUploader from '$lib/components/ImageUploader.svelte';
 	import ResultDisplay from '$lib/components/ResultDisplay.svelte';
-	import { evaluateImage, imageToBase64 } from '$lib/api/dify';
+	import { evaluateImage } from '$lib/api/dify';
 	import type { UploadedImage, EvaluationResult } from '$lib/types';
 	
 	let context: string = '';
-	let currentImage: UploadedImage | null = null;
+	let image1: UploadedImage | null = null;
+	let image2: UploadedImage | null = null;
 	let results: EvaluationResult[] = [];
 	let evaluatedImages: UploadedImage[] = [];
 	let isLoading = false;
 	let error: string | null = null;
 	
-	$: canEvaluate = context.trim() !== '' && currentImage !== null;
+	$: canEvaluate = context.trim() !== '' && image1 !== null && image2 !== null;
 	
 	async function handleEvaluate() {
-		if (!canEvaluate || !currentImage) return;
+		if (!canEvaluate || !image1 || !image2) return;
 		
 		isLoading = true;
 		error = null;
 		
 		try {
-			const image64 = await imageToBase64(currentImage.file);
-			
 			const response = await evaluateImage({
 				context: context.trim(),
-				image: image64
+				image1: image1.file,
+				image2: image2.file
 			});
 			
 			// Create evaluation result
 			const evaluationResult: EvaluationResult = {
 				id: crypto.randomUUID(),
-				imageId: currentImage.id,
+				imageId: `${image1.id}_${image2.id}`,
 				score: response.text.score,
 				analysis: response.text.analysis,
 				details: response.text.details,
@@ -40,7 +40,7 @@
 			
 			// Add to results and evaluated images
 			results = [...results, evaluationResult];
-			evaluatedImages = [...evaluatedImages, currentImage];
+			evaluatedImages = [...evaluatedImages, image1, image2];
 			
 			// Sort results by score (highest first)
 			results = results.sort((a, b) => b.score - a.score).map((result, index) => ({
@@ -48,8 +48,9 @@
 				rank: index + 1
 			}));
 			
-			// Clear current image for next evaluation
-			currentImage = null;
+			// Clear images for next evaluation
+			image1 = null;
+			image2 = null;
 			
 		} catch (err) {
 			error = err instanceof Error ? err.message : '評価処理中にエラーが発生しました';
@@ -64,13 +65,17 @@
 	}
 	
 	function resetAll() {
-		if (currentImage) {
-			URL.revokeObjectURL(currentImage.url);
+		if (image1) {
+			URL.revokeObjectURL(image1.url);
+		}
+		if (image2) {
+			URL.revokeObjectURL(image2.url);
 		}
 		evaluatedImages.forEach(img => URL.revokeObjectURL(img.url));
 		
 		context = '';
-		currentImage = null;
+		image1 = null;
+		image2 = null;
 		results = [];
 		evaluatedImages = [];
 		error = null;
@@ -78,20 +83,29 @@
 </script>
 
 <svelte:head>
-	<title>ボディビルダー評価アプリ</title>
-	<meta name="description" content="コンテキストに基づいて画像を評価・ランキング" />
+	<title>画像比較評価アプリ</title>
+	<meta name="description" content="コンテキストに基づいて2つの画像を比較評価" />
 </svelte:head>
 
 <div class="container">
 	<header>
-		<h1>ボディビルダー評価アプリ</h1>
-		<p class="subtitle">評価基準を設定して、画像をスコア化・ランキング表示します</p>
+		<h1>画像比較評価アプリ</h1>
+		<p class="subtitle">評価基準を設定して、2つの画像を比較評価します</p>
 	</header>
 	
 	<main>
 		<div class="evaluation-form">
 			<ContextInput bind:context />
-			<ImageUploader bind:image={currentImage} />
+			<div class="images-container">
+				<div class="image-upload-wrapper">
+					<h3>画像1</h3>
+					<ImageUploader bind:image={image1} />
+				</div>
+				<div class="image-upload-wrapper">
+					<h3>画像2</h3>
+					<ImageUploader bind:image={image2} />
+				</div>
+			</div>
 		</div>
 		
 		<div class="actions">
@@ -173,11 +187,22 @@
 		margin-bottom: 2rem;
 	}
 	
+	.images-container {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 1rem;
+	}
+	
 	@media (min-width: 768px) {
-		.evaluation-form {
+		.images-container {
 			grid-template-columns: 1fr 1fr;
-			align-items: start;
 		}
+	}
+	
+	.image-upload-wrapper h3 {
+		margin-bottom: 0.5rem;
+		font-size: 1.1rem;
+		color: #555;
 	}
 	
 	.actions {

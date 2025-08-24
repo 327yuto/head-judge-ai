@@ -18,7 +18,8 @@ export interface EvaluationResult {
 
 export interface EvaluationRequest {
 	context: string;
-	image: string;
+	image1: File;
+	image2: File;
 }
 
 export interface EvaluationResponse {
